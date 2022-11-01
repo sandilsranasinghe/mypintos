@@ -19,13 +19,11 @@ void ishell(void)
     char _input_buffer[256];   // buffer to keep line of input
     int _input_buffer_end = 0; // pointer to current end of line
     int _end_usr_input = 0;    // to exit
-    char *_cmd_name = (char *)malloc(8 * sizeof(char));
 
     while (1)
     {
         if (_end_usr_input)
         {
-            free(_cmd_name);
             break;
         }
 
