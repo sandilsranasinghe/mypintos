@@ -92,6 +92,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list_elem blockedelem; /* List element for blocked threads list */
+    int64_t sleep_ticks; /*Time to wake if sleeping*/
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -118,6 +120,8 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+void thread_sleep (int64_t);
+void thread_wake(int64_t);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

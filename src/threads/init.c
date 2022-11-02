@@ -139,6 +139,7 @@ int pintos_init(void)
   else
   {
     // TODO: no command line passed to kernel. Run interactively
+    timer_sleep(128);
     ishell();
   }
 
