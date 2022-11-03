@@ -85,7 +85,14 @@ thread_sleep_less (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *a = list_entry (a_, struct thread, blockedelem);
   const struct thread *b = list_entry (b_, struct thread, blockedelem);
   
-  return a->sleep_ticks < b->sleep_ticks;
+  if (a->sleep_ticks == b->sleep_ticks)
+  {
+    return a->priority > b->priority;
+  }
+  else 
+  {
+    return a->sleep_ticks < b->sleep_ticks;
+  }
 }
 
 /* Initializes the threading system by transforming the code
@@ -267,6 +274,8 @@ void thread_sleep(int64_t ticks)
   enum intr_level old_level;
 
   ASSERT(!intr_context()); // external interrupts cannot sleep
+  // TODO this may be a problem when the blocked_list is very long. See if we can find another
+  // tool from synch to accomplish this
   old_level = intr_disable(); // we don't want any interruptions
   if (cur != idle_thread) {
     cur->sleep_ticks = ticks;
@@ -282,7 +291,7 @@ void thread_wake(int64_t cur_ticks)
   if (!list_empty (&blocked_list))
   {
     t = list_entry (list_front(&blocked_list), struct thread, blockedelem);
-    if (t->sleep_ticks < cur_ticks)
+    if (t->sleep_ticks <= cur_ticks)
     {
       list_pop_front(&blocked_list);
       t->sleep_ticks = NULL;
