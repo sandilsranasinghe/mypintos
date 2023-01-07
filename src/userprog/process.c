@@ -94,11 +94,30 @@ start_process (void *cmd_args)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while (1)
+  struct thread *curr_t;
+  struct thread *child_t;
+  struct list_elem *child_elem;
+
+  curr_t = thread_current();
+
+  // Check if child_tid is in current threads children.
+  for 
+  (
+    child_elem = list_begin(&curr_t->child_list); 
+    child_elem != list_end(&curr_t->child_list);
+    child_elem = list_next(child_elem)
+  )
   {
-    thread_yield();
+    child_t = list_entry(child_elem, struct thread, child_elem);
+    if (child_t->tid == child_tid) { break; }
   }
+  // If child with child_tid was not in list, its not a child of the calling process
+  if (child_elem == list_end(&curr_t->child_list)) { return -1; }
+
+  // Wait for child thread to exit
+  sema_down(&child_t->child_exit);
   
+  // TODO will need to obtain child exit status
   return -1;
 }
 
@@ -108,6 +127,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  // 
+  sema_up(&cur->child_exit);
+  list_remove(&cur->child_elem);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
