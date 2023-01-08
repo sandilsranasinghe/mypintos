@@ -1,16 +1,22 @@
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
 #define CONSOLE_OUTPUT 1
+#define SYS_EXIT_STATUS_ERROR -1
 
 static void syscall_handler(struct intr_frame *);
 static void syscall_exit(int status);
 static int syscall_write(int fd, const void *buffer, unsigned size);
+
+void validate_ptr(const void *_ptr);
+int *get_kth_ptr(const void *_ptr, int _k);
 
 void syscall_init(void)
 {
@@ -20,16 +26,16 @@ void syscall_init(void)
 static void
 syscall_handler(struct intr_frame *f UNUSED)
 {
-  // TODO check valid esp
-
-  int syscall_type = *(int *)f->esp;
+  validate_ptr(f->esp);
+  int syscall_type = *get_kth_ptr(f->esp, 0);
   // printf("syscall %d \n", syscall_type);
 
   switch (syscall_type)
   {
   case SYS_EXIT:
   {
-    int status = *(((int *)f->esp) + 1);
+    // get args
+    int status = *get_kth_ptr(f->esp, 1);
     syscall_exit(status);
     break;
   }
@@ -37,9 +43,9 @@ syscall_handler(struct intr_frame *f UNUSED)
   case SYS_WRITE:
   {
     // get args
-    int fd = *((int *)f->esp + 1);
-    void *buffer = (void *)(*((int *)f->esp + 2));
-    unsigned size = *((unsigned *)f->esp + 3);
+    int fd = *get_kth_ptr(f->esp, 1);
+    void *buffer = (void *) *get_kth_ptr(f->esp, 2);
+    unsigned size = *((unsigned *) get_kth_ptr(f->esp, 3));
 
     f->eax = syscall_write(fd, buffer, size);
     break;
@@ -75,4 +81,32 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
   }
 
   return written_size;
+}
+
+void validate_ptr(const void *_ptr)
+{
+  struct thread *curr_t;
+  curr_t = thread_current();
+
+  if (_ptr == NULL) {
+    // obviusly shouldnt be a null pointer
+    syscall_exit(SYS_EXIT_STATUS_ERROR);
+  }
+  if (is_kernel_vaddr(_ptr)) {
+    // shouldn't be in kernel address space
+    // NOTE: this should be called before pagedir_get_page to prevent an assertion error
+    syscall_exit(SYS_EXIT_STATUS_ERROR);
+  }
+  if (pagedir_get_page(curr_t->pagedir, _ptr) == NULL) {
+    // address should be mapped
+    syscall_exit(SYS_EXIT_STATUS_ERROR);
+  }
+}
+
+int *get_kth_ptr(const void *_ptr, int _k)
+{
+  int *next_ptr = (int*) _ptr + _k;
+  validate_ptr((void *) next_ptr);
+  validate_ptr((void *) (next_ptr+1));
+  return next_ptr;
 }
