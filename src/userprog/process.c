@@ -121,14 +121,21 @@ process_wait (tid_t child_tid UNUSED)
     if (child_t->tid == child_tid) { break; }
   }
   // If child with child_tid was not in list, its not a child of the calling process
-  if (child_elem == list_end(&curr_t->child_list)) { return -1; }
+  if (child_elem == list_end(&curr_t->child_list)) 
+  { 
+    return -1; 
+  }
 
+  list_remove(&child_t->child_elem);
   // Wait for child thread to exit
   // printf("# %s wait for child %s\n", curr_t->name, child_t->name);
-  sema_down(&child_t->exit_sema);
+  sema_down(&child_t->pre_exit_sema);
   
-  // TODO will need to obtain child exit status
-  return -1;
+  // printf("# %s waited for child %s with exit %d\n", curr_t->name, child_t->name, child_t->exit_status);
+  int exit_status = child_t->exit_status;
+  // indicate that childs exit status was obtained
+  sema_up(&child_t->exit_sema);
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -139,8 +146,8 @@ process_exit (void)
   uint32_t *pd;
 
   // 
-  sema_up(&cur->exit_sema);
-  list_remove(&cur->child_elem);
+  sema_up(&cur->pre_exit_sema);
+  sema_down(&cur->exit_sema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

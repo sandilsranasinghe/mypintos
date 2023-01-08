@@ -21,6 +21,7 @@
 static void syscall_handler(struct intr_frame *);
 static void syscall_exit(int status);
 static tid_t syscall_exec(const char *cmd_args);
+static int syscall_wait(tid_t tid);
 static bool syscall_create(const char *file, unsigned initial_size);
 static bool syscall_remove(const char *file);
 static int syscall_open(const char *file);
@@ -75,6 +76,8 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_WAIT:
   {
+    tid_t tid = *get_kth_ptr(f->esp, 1);
+    f->eax = syscall_wait(tid);
     break;
   }
 
@@ -160,6 +163,7 @@ syscall_handler(struct intr_frame *f UNUSED)
 static void syscall_exit(int status)
 {
   struct thread *t = thread_current();
+  t->exit_status = status;
   printf("%s: exit(%d)\n", t->name, status);
   thread_exit();
 }
@@ -204,6 +208,11 @@ static tid_t syscall_exec(const char *cmd_args)
   }
 
   return child_tid;
+}
+
+static int syscall_wait(tid_t tid)
+{
+  return process_wait(tid);
 }
 
 static bool syscall_create(const char *file, unsigned initial_size)
@@ -274,12 +283,8 @@ static int syscall_read(int fd, void *buffer, unsigned size)
 
   if (fd == KEYBOARD_INPUT)
   {
-    for (unsigned i=0; i<size; i++) {
-      uint8_t _char = input_getc();
-      if (_char == NULL) {
-        break;
-      }
-      *((uint8_t *) buffer + i) = _char;
+    for (unsigned i=0; i<size; i++) { 
+      *((uint8_t *) buffer + i) = input_getc();
       read_size++;
     }
   }
@@ -336,7 +341,6 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
 static void syscall_close(int fd)
 {
   struct file_descriptor *_file_descriptor = get_from_fd(fd);
-  int file_size;
   if (_file_descriptor != NULL)
   {
     lock_acquire((&file_system_lock));
@@ -344,6 +348,7 @@ static void syscall_close(int fd)
     lock_release(&file_system_lock);
 
     list_remove(&_file_descriptor->fd_elem);
+    free(_file_descriptor);
   }
 }
 

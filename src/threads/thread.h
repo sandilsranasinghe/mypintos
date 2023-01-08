@@ -98,8 +98,10 @@ struct thread
     struct list_elem child_elem;       // list element for child list of parent
     struct thread *parent_t;           // pointer to parent thread
     struct semaphore init_sema;        // semaphore for parent to wait for child to init
-    struct semaphore exit_sema;        // semaphore for parent to wait for child exit to sync
+    struct semaphore pre_exit_sema;    // semaphore for parent to wait for child to start exiting and set exit status
+    struct semaphore exit_sema;        // semaphore for child to wait for parent to get exit status
     bool status_load_success;          // indicate whether process loaded successfully
+    int exit_status;                   // exit status for parents who wait to see
 
     int next_fd;                       // next file descriptor
     struct list open_fd_list;          // list of open file descriptors held by process
