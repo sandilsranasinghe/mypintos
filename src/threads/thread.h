@@ -97,8 +97,9 @@ struct thread
     struct list child_list;            // maintain list of children
     struct list_elem child_elem;       // list element for child list of parent
     struct thread *parent_t;           // pointer to parent thread
-    struct semaphore child_init;       // semaphore for parent to wait for child to init
-    struct semaphore child_exit;       // semaphore for parent to wait for child exit to sync
+    struct semaphore init_sema;        // semaphore for parent to wait for child to init
+    struct semaphore exit_sema;        // semaphore for parent to wait for child exit to sync
+    bool status_load_success;          // indicate whether process loaded successfully
 
 
 #ifdef USERPROG

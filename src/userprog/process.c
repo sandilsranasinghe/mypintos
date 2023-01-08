@@ -30,6 +30,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *save_ptr;
+  char *_file_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -40,13 +42,16 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* We only need the first token in the string as the file name */
-  char *save_ptr;
-  file_name = strtok_r((char*) file_name, " ", &save_ptr );
+  _file_name = malloc(strlen(file_name) + 1);
+  strlcpy (_file_name, file_name, strlen(file_name)+1);
+  _file_name = strtok_r((char*) _file_name, " ", &save_ptr );
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+  free(_file_name);
   return tid;
 }
 
@@ -66,6 +71,10 @@ start_process (void *cmd_args)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (_cmd_args, &if_.eip, &if_.esp);
+
+  struct thread *curr_t = thread_current();
+  curr_t->status_load_success = success;
+  sema_up(&curr_t->init_sema);
 
   /* If load failed, quit. */
   palloc_free_page (cmd_args);
@@ -115,7 +124,8 @@ process_wait (tid_t child_tid UNUSED)
   if (child_elem == list_end(&curr_t->child_list)) { return -1; }
 
   // Wait for child thread to exit
-  sema_down(&child_t->child_exit);
+  // printf("# %s wait for child %s\n", curr_t->name, child_t->name);
+  sema_down(&child_t->exit_sema);
   
   // TODO will need to obtain child exit status
   return -1;
@@ -129,7 +139,7 @@ process_exit (void)
   uint32_t *pd;
 
   // 
-  sema_up(&cur->child_exit);
+  sema_up(&cur->exit_sema);
   list_remove(&cur->child_elem);
 
   /* Destroy the current process's page directory and switch back
