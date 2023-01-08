@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
@@ -17,6 +18,8 @@
 static void syscall_handler(struct intr_frame *);
 static void syscall_exit(int status);
 static tid_t syscall_exec(const char *cmd_args);
+static bool syscall_create(const char *file, unsigned initial_size);
+static bool syscall_remove(const char *file);
 static int syscall_write(int fd, const void *buffer, unsigned size);
 
 void validate_ptr(const void *_ptr);
@@ -25,6 +28,7 @@ int *get_kth_ptr(const void *_ptr, int _k);
 
 void syscall_init(void)
 {
+  lock_init(&file_system_lock);
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -45,7 +49,6 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_EXIT:
   {
-    // get args
     int status = *get_kth_ptr(f->esp, 1);
     syscall_exit(status);
     break;
@@ -66,11 +69,18 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_CREATE:
   {
+    char *file = *(char **)get_kth_ptr(f->esp, 1);
+    validate_str(file);
+    unsigned initial_size = *((unsigned *)get_kth_ptr(f->esp, 2));
+    f->eax = syscall_create(file, initial_size);
     break;
   }
 
   case SYS_REMOVE:
   {
+    char *file = *(char **)get_kth_ptr(f->esp, 1);
+    validate_str(file);
+    f->eax = syscall_remove(file);
     break;
   }
 
@@ -91,7 +101,6 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_WRITE:
   {
-    // get args
     int fd = *get_kth_ptr(f->esp, 1);
     void *buffer = (void *)*get_kth_ptr(f->esp, 2);
     unsigned size = *((unsigned *)get_kth_ptr(f->esp, 3));
@@ -148,7 +157,7 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
   return written_size;
 }
 
-tid_t syscall_exec(const char *cmd_args)
+static tid_t syscall_exec(const char *cmd_args)
 {
   struct thread *curr_t = thread_current();
   struct thread *child_t;
@@ -188,6 +197,26 @@ tid_t syscall_exec(const char *cmd_args)
   }
 
   return child_tid;
+}
+
+static bool syscall_create(const char *file, unsigned initial_size)
+{
+  // acquire lock before accessing file system and release afterwards
+  lock_acquire(&file_system_lock);
+  bool create_status = filesys_create(file, initial_size);
+  lock_release(&file_system_lock);
+
+  return create_status;
+}
+
+static bool syscall_remove(const char *file)
+{
+  // acquire lock before accessing file system and release afterwards
+  lock_acquire(&file_system_lock);
+  bool remove_status = filesys_remove(file);
+  lock_release(&file_system_lock);
+
+  return remove_status;
 }
 
 void validate_ptr(const void *_ptr)
