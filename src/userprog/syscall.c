@@ -7,6 +7,7 @@
 #include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "devices/shutdown.h"
 
 #define CONSOLE_OUTPUT 1
 #define SYS_EXIT_STATUS_ERROR -1
@@ -32,11 +33,52 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   switch (syscall_type)
   {
+  case SYS_HALT:
+  {
+    shutdown_power_off();
+    break;
+  }
+
   case SYS_EXIT:
   {
     // get args
     int status = *get_kth_ptr(f->esp, 1);
     syscall_exit(status);
+    break;
+  }
+
+  case SYS_EXEC:
+  {
+    break;
+  }
+
+  case SYS_WAIT:
+  {
+    break;
+  }
+
+  case SYS_CREATE:
+  {
+    break;
+  }
+
+  case SYS_REMOVE:
+  {
+    break;
+  }
+
+  case SYS_OPEN:
+  {
+    break;
+  }
+
+  case SYS_FILESIZE:
+  {
+    break;
+  }
+
+  case SYS_READ:
+  {
     break;
   }
 
@@ -51,8 +93,24 @@ syscall_handler(struct intr_frame *f UNUSED)
     break;
   }
 
+  case SYS_SEEK:
+  {
+    break;
+  }
+
+  case SYS_TELL:
+  {
+    break;
+  }
+
+  case SYS_CLOSE:
+  {
+    break;
+  }
+
   default:
   {
+    // TODO?
     break;
   }
   }
