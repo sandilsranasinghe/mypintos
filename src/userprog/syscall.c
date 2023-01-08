@@ -304,6 +304,7 @@ static int syscall_read(int fd, void *buffer, unsigned size)
 
 static int syscall_write(int fd, const void *buffer, unsigned size)
 {
+  struct file_descriptor *_file_descriptor;
   char *_buffer = (char *)buffer;
   int written_size = 0;
 
@@ -312,9 +313,21 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
     putbuf(_buffer, size);
     written_size = size;
   }
+  else if (fd == KEYBOARD_INPUT)
+  {
+    return ERROR_STATUS;
+  }
   else
   {
-    // TODO write to files
+    _file_descriptor = get_from_fd(fd);
+    if (_file_descriptor == NULL) 
+    {
+      return ERROR_STATUS;
+    }
+
+    lock_acquire((&file_system_lock));
+    written_size = file_write(_file_descriptor->_file, _buffer, size);
+    lock_release(&file_system_lock);
   }
 
   return written_size;
