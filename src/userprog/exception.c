@@ -2,6 +2,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
+#include "userprog/pagedir.h"
+#include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
@@ -10,6 +12,31 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+
+void _validate_ptr(const void *_ptr);
+
+void _validate_ptr(const void *_ptr)
+{
+  struct thread *curr_t;
+  curr_t = thread_current();
+
+  if (_ptr == NULL)
+  {
+    // obviusly shouldnt be a null pointer
+    thread_exit();
+  }
+  if (is_kernel_vaddr(_ptr))
+  {
+    // shouldn't be in kernel address space
+    // NOTE: this should be called before pagedir_get_page to prevent an assertion error
+    thread_exit();
+  }
+  if (pagedir_get_page(curr_t->pagedir, _ptr) == NULL)
+  {
+    // address should be mapped
+    thread_exit();
+  }
+}
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -135,6 +162,8 @@ page_fault (struct intr_frame *f)
      [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
      (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
+
+  _validate_ptr(fault_addr);
 
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
