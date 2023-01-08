@@ -145,6 +145,8 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+
   // 
   sema_up(&cur->pre_exit_sema);
   sema_down(&cur->exit_sema);

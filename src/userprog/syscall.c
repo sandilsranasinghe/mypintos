@@ -49,7 +49,7 @@ syscall_handler(struct intr_frame *f UNUSED)
 {
   validate_ptr(f->esp);
   int syscall_type = *get_kth_ptr(f->esp, 0);
-  // printf("syscall %d \n", syscall_type);
+  // printf("syscall %d by %s \n", syscall_type, thread_current()->name);
 
   switch (syscall_type)
   {
@@ -169,7 +169,6 @@ static void syscall_exit(int status)
 {
   struct thread *t = thread_current();
   t->exit_status = status;
-  printf("%s: exit(%d)\n", t->name, status);
   thread_exit();
 }
 
@@ -323,7 +322,7 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
   if (fd == CONSOLE_OUTPUT)
   {
     putbuf(_buffer, size);
-    written_size = size;
+    written_size = size;    
   }
   else if (fd == KEYBOARD_INPUT)
   {
