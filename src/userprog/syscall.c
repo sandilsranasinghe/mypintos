@@ -34,7 +34,7 @@ static void syscall_close(int fd);
 
 void validate_ptr(const void *_ptr);
 void validate_str(const char *_str);
-void validate_buffer(const void* buffer, unsigned size);
+void validate_buffer(const void *buffer, unsigned size);
 int *get_kth_ptr(const void *_ptr, int _k);
 struct file_descriptor *get_from_fd(int fd);
 
@@ -119,7 +119,7 @@ syscall_handler(struct intr_frame *f UNUSED)
     void *buffer = (void *)*get_kth_ptr(f->esp, 2);
     unsigned size = *((unsigned *)get_kth_ptr(f->esp, 3));
     validate_buffer(buffer, size);
-    
+
     f->eax = syscall_read(fd, buffer, size);
     break;
   }
@@ -137,11 +137,16 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_SEEK:
   {
+    int fd = *get_kth_ptr(f->esp, 1);
+    unsigned position = *((unsigned *)get_kth_ptr(f->esp, 2));
+    syscall_seek(fd, position);
     break;
   }
 
   case SYS_TELL:
   {
+    int fd = *get_kth_ptr(f->esp, 1);
+    f->eax = syscall_tell(fd);
     break;
   }
 
@@ -283,8 +288,9 @@ static int syscall_read(int fd, void *buffer, unsigned size)
 
   if (fd == KEYBOARD_INPUT)
   {
-    for (unsigned i=0; i<size; i++) { 
-      *((uint8_t *) buffer + i) = input_getc();
+    for (unsigned i = 0; i < size; i++)
+    {
+      *((uint8_t *)buffer + i) = input_getc();
       read_size++;
     }
   }
@@ -292,16 +298,17 @@ static int syscall_read(int fd, void *buffer, unsigned size)
   {
     return ERROR_STATUS;
   }
-  else {
+  else
+  {
     _file_descriptor = get_from_fd(fd);
-    if (_file_descriptor == NULL) 
+    if (_file_descriptor == NULL)
     {
       return ERROR_STATUS;
     }
 
     lock_acquire((&file_system_lock));
     read_size = file_read(_file_descriptor->_file, buffer, size);
-    lock_release(&file_system_lock);    
+    lock_release(&file_system_lock);
   }
 
   return read_size;
@@ -325,7 +332,7 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
   else
   {
     _file_descriptor = get_from_fd(fd);
-    if (_file_descriptor == NULL) 
+    if (_file_descriptor == NULL)
     {
       return ERROR_STATUS;
     }
@@ -336,6 +343,33 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
   }
 
   return written_size;
+}
+
+static void syscall_seek(int fd, unsigned position)
+{
+  struct file_descriptor *_file_descriptor = get_from_fd(fd);
+  if (_file_descriptor != NULL)
+  {
+    lock_acquire((&file_system_lock));
+    file_seek(_file_descriptor->_file, position);
+    lock_release(&file_system_lock);
+  }
+}
+
+static unsigned syscall_tell(int fd)
+{
+  unsigned pos = 0;
+  struct file_descriptor *_file_descriptor = get_from_fd(fd);
+  if (_file_descriptor == NULL)
+  {
+    return pos;
+  }
+
+  lock_acquire((&file_system_lock));
+  pos = file_tell(_file_descriptor->_file);
+  lock_release(&file_system_lock);
+
+  return pos;
 }
 
 static void syscall_close(int fd)
@@ -387,11 +421,11 @@ void validate_str(const char *_str)
   }
 }
 
-void validate_buffer(const void* buffer, unsigned size)
+void validate_buffer(const void *buffer, unsigned size)
 {
-  for (unsigned i=0; i < size; i++)
+  for (unsigned i = 0; i < size; i++)
   {
-    validate_ptr((void*) ((char *) buffer + i));
+    validate_ptr((void *)((char *)buffer + i));
   }
 }
 
