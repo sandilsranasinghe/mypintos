@@ -8,6 +8,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
@@ -20,11 +21,18 @@ static void syscall_exit(int status);
 static tid_t syscall_exec(const char *cmd_args);
 static bool syscall_create(const char *file, unsigned initial_size);
 static bool syscall_remove(const char *file);
+static int syscall_open(const char *file);
+static int syscall_filesize(int fd);
+static int syscall_read(int fd, void *buffer, unsigned size);
 static int syscall_write(int fd, const void *buffer, unsigned size);
+static void syscall_seek(int fd, unsigned position);
+static unsigned syscall_tell(int fd);
+static void syscall_close(int fd);
 
 void validate_ptr(const void *_ptr);
 void validate_str(const char *_str);
 int *get_kth_ptr(const void *_ptr, int _k);
+struct file_descriptor *get_from_fd(int fd);
 
 void syscall_init(void)
 {
@@ -86,11 +94,16 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_OPEN:
   {
+    char *file = *(char **)get_kth_ptr(f->esp, 1);
+    validate_str(file);
+    f->eax = syscall_open(file);
     break;
   }
 
   case SYS_FILESIZE:
   {
+    int fd = *get_kth_ptr(f->esp, 1);
+    f->eax = syscall_filesize(fd);
     break;
   }
 
@@ -121,12 +134,14 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_CLOSE:
   {
+    int fd = *get_kth_ptr(f->esp, 1);
+    syscall_close(fd);
     break;
   }
 
   default:
   {
-    // TODO?
+    // TODO what happens here?
     break;
   }
   }
@@ -219,6 +234,61 @@ static bool syscall_remove(const char *file)
   return remove_status;
 }
 
+static int syscall_open(const char *file)
+{
+  struct file_descriptor *_file_descriptor = malloc(sizeof(struct file_descriptor *));
+  struct file *_file;
+  struct thread *curr_t;
+
+  // acquire lock before accessing file system and release afterwards
+  lock_acquire((&file_system_lock));
+  _file = filesys_open(file);
+  lock_release(&file_system_lock);
+
+  if (_file == NULL)
+  {
+    return ERROR_STATUS;
+  }
+
+  curr_t = thread_current();
+  _file_descriptor->fd = curr_t->next_fd;
+  curr_t->next_fd++; // Increment next fd so that it will be different for the next file opened by process
+  _file_descriptor->_file = _file;
+  list_push_back(&curr_t->open_fd_list, &_file_descriptor->fd_elem);
+
+  return _file_descriptor->fd;
+}
+
+static int syscall_filesize(int fd)
+{
+  struct file_descriptor *_file_descriptor = get_from_fd(fd);
+  int file_size;
+  if (_file_descriptor == NULL)
+  {
+    return ERROR_STATUS;
+  }
+
+  lock_acquire((&file_system_lock));
+  file_size = file_length(_file_descriptor->_file);
+  lock_release(&file_system_lock);
+
+  return file_size;
+}
+
+static void syscall_close(int fd)
+{
+  struct file_descriptor *_file_descriptor = get_from_fd(fd);
+  int file_size;
+  if (_file_descriptor != NULL)
+  {
+    lock_acquire((&file_system_lock));
+    file_close(_file_descriptor->_file);
+    lock_release(&file_system_lock);
+
+    list_remove(&_file_descriptor->fd_elem);
+  }
+}
+
 void validate_ptr(const void *_ptr)
 {
   struct thread *curr_t;
@@ -261,4 +331,33 @@ int *get_kth_ptr(const void *_ptr, int _k)
   // Catch the edge case where just a part of the value is in valid address space
   validate_ptr((void *)(next_ptr + 1));
   return next_ptr;
+}
+
+// Get a file_descriptor from the current process' list of open file descriptors using
+// the given fd value
+struct file_descriptor *get_from_fd(int fd)
+{
+  struct thread *curr_t = thread_current();
+  struct file_descriptor *_file_descriptor;
+  struct list_elem *fd_elem;
+
+  // Check if child_tid is in current threads children.
+  for (
+      fd_elem = list_begin(&curr_t->open_fd_list);
+      fd_elem != list_end(&curr_t->open_fd_list);
+      fd_elem = list_next(fd_elem))
+  {
+    _file_descriptor = list_entry(fd_elem, struct file_descriptor, fd_elem);
+    if (_file_descriptor->fd == fd)
+    {
+      break;
+    }
+  }
+  // If fd was not in list return NULL
+  if (fd_elem == list_end(&curr_t->open_fd_list))
+  {
+    return NULL;
+  }
+
+  return _file_descriptor;
 }

@@ -101,6 +101,9 @@ struct thread
     struct semaphore exit_sema;        // semaphore for parent to wait for child exit to sync
     bool status_load_success;          // indicate whether process loaded successfully
 
+    int next_fd;                       // next file descriptor
+    struct list open_fd_list;          // list of open file descriptors held by process
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
