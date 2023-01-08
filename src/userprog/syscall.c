@@ -12,8 +12,10 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/shutdown.h"
+#include "devices/input.h"
 
 #define CONSOLE_OUTPUT 1
+#define KEYBOARD_INPUT 0
 #define ERROR_STATUS -1
 
 static void syscall_handler(struct intr_frame *);
@@ -31,6 +33,7 @@ static void syscall_close(int fd);
 
 void validate_ptr(const void *_ptr);
 void validate_str(const char *_str);
+void validate_buffer(const void* buffer, unsigned size);
 int *get_kth_ptr(const void *_ptr, int _k);
 struct file_descriptor *get_from_fd(int fd);
 
@@ -109,6 +112,12 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_READ:
   {
+    int fd = *get_kth_ptr(f->esp, 1);
+    void *buffer = (void *)*get_kth_ptr(f->esp, 2);
+    unsigned size = *((unsigned *)get_kth_ptr(f->esp, 3));
+    validate_buffer(buffer, size);
+    
+    f->eax = syscall_read(fd, buffer, size);
     break;
   }
 
@@ -117,6 +126,7 @@ syscall_handler(struct intr_frame *f UNUSED)
     int fd = *get_kth_ptr(f->esp, 1);
     void *buffer = (void *)*get_kth_ptr(f->esp, 2);
     unsigned size = *((unsigned *)get_kth_ptr(f->esp, 3));
+    validate_buffer(buffer, size);
 
     f->eax = syscall_write(fd, buffer, size);
     break;
@@ -152,24 +162,6 @@ static void syscall_exit(int status)
   struct thread *t = thread_current();
   printf("%s: exit(%d)\n", t->name, status);
   thread_exit();
-}
-
-static int syscall_write(int fd, const void *buffer, unsigned size)
-{
-  char *_buffer = (char *)buffer;
-  int written_size = 0;
-
-  if (fd == CONSOLE_OUTPUT)
-  {
-    putbuf(_buffer, size);
-    written_size = size;
-  }
-  else
-  {
-    // TODO write to files
-  }
-
-  return written_size;
 }
 
 static tid_t syscall_exec(const char *cmd_args)
@@ -275,6 +267,59 @@ static int syscall_filesize(int fd)
   return file_size;
 }
 
+static int syscall_read(int fd, void *buffer, unsigned size)
+{
+  struct file_descriptor *_file_descriptor;
+  int read_size = 0;
+
+  if (fd == KEYBOARD_INPUT)
+  {
+    for (unsigned i=0; i<size; i++) {
+      uint8_t _char = input_getc();
+      if (_char == NULL) {
+        break;
+      }
+      *((uint8_t *) buffer + i) = _char;
+      read_size++;
+    }
+  }
+  else if (fd == CONSOLE_OUTPUT)
+  {
+    return ERROR_STATUS;
+  }
+  else {
+    _file_descriptor = get_from_fd(fd);
+    if (_file_descriptor == NULL) 
+    {
+      return ERROR_STATUS;
+    }
+
+    lock_acquire((&file_system_lock));
+    read_size = file_read(_file_descriptor->_file, buffer, size);
+    lock_release(&file_system_lock);    
+  }
+
+  return read_size;
+}
+
+static int syscall_write(int fd, const void *buffer, unsigned size)
+{
+  char *_buffer = (char *)buffer;
+  int written_size = 0;
+
+  if (fd == CONSOLE_OUTPUT)
+  {
+    putbuf(_buffer, size);
+    written_size = size;
+  }
+  else
+  {
+    // TODO write to files
+  }
+
+  return written_size;
+}
+
 static void syscall_close(int fd)
 {
   struct file_descriptor *_file_descriptor = get_from_fd(fd);
@@ -321,6 +366,14 @@ void validate_str(const char *_str)
       k++)
   {
     validate_ptr((void *)((char *)_str + k + 1));
+  }
+}
+
+void validate_buffer(const void* buffer, unsigned size)
+{
+  for (unsigned i=0; i < size; i++)
+  {
+    validate_ptr((void*) ((char *) buffer + i));
   }
 }
 
