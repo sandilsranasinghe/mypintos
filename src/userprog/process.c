@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -146,9 +147,27 @@ process_exit (void)
   uint32_t *pd;
 
   printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+  if (cur->process_file != NULL)
+  {
+    file_allow_write(cur->process_file);
+    file_close(cur->process_file);
+  }
 
-  // 
+  // close any open files
+  struct list_elem *fd_elem;
+  while(!list_empty(&cur->open_fd_list))
+  {
+      fd_elem = list_pop_front(&cur->open_fd_list);
+      struct file_descriptor *_file_descriptor = list_entry(fd_elem, struct file_descriptor, fd_elem);
+      file_close(_file_descriptor->_file);
+      list_remove(&_file_descriptor->fd_elem);
+      free(_file_descriptor);
+  }
+
+  // Let parent know that this is ready to exit
   sema_up(&cur->pre_exit_sema);
+
+  // wait for parent to obtain exit status
   sema_down(&cur->exit_sema);
 
   /* Destroy the current process's page directory and switch back
@@ -366,7 +385,16 @@ load (const char *cmd_args, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (!success)
+  {
+    file_close (file);
+  }
+  else
+  {
+    // don't allow the file to be modified while the process is running
+    t->process_file = file;
+    file_deny_write(file);
+  }
   return success;
 }
 
