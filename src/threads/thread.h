@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include "threads/synch.h"
 #include <stdint.h>
 
 /* States in a thread's life cycle. */
@@ -94,6 +95,20 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list_elem blockedelem; /* List element for blocked threads list */
     int64_t sleep_ticks; /*Time to wake if sleeping*/
+
+    struct list child_list;            // maintain list of children
+    struct list_elem child_elem;       // list element for child list of parent
+    struct thread *parent_t;           // pointer to parent thread
+    struct semaphore init_sema;        // semaphore for parent to wait for child to init
+    struct semaphore pre_exit_sema;    // semaphore for parent to wait for child to start exiting and set exit status
+    struct semaphore exit_sema;        // semaphore for child to wait for parent to get exit status
+    bool status_load_success;          // indicate whether process loaded successfully
+    int exit_status;                   // exit status for parents who wait to see
+
+    int next_fd;                       // next file descriptor
+    struct list open_fd_list;          // list of open file descriptors held by process
+    struct file *process_file;         // The file which contains the code for the process
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
